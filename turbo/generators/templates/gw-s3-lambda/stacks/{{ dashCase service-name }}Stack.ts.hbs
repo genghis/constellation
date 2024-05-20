@@ -1,0 +1,95 @@
+// See https://github.com/aws-samples/serverless-patterns/blob/main/apigw-s3-cdk/cdk/lib/apigw-s3-cdk-stack.ts
+import { Stack, StackProps, aws_s3, aws_s3_notifications } from 'aws-cdk-lib';
+import { Construct } from 'constructs';
+import { aws_apigateway as apigw } from "aws-cdk-lib";
+import { aws_iam as iam } from "aws-cdk-lib";
+import { Runtime } from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs"
+import * as path from 'path';
+
+export class {{ pascalCase service-name }}Stack extends Stack {
+  public readonly apiGatewayRole: iam.Role;
+
+  constructor(scope: Construct, id: string, props?: StackProps) {
+    super(scope, id, props);
+    
+    //Create REST API
+    const restApi = new apigw.RestApi(this, '{{ camelCase service-name }}', {
+      restApiName: 'S3 Proxy Service - {{ camelCase service-name }}',
+      description: "S3 Actions Proxy API for {{ camelCase service-name }}",
+      endpointConfiguration: {
+        types: [apigw.EndpointType.EDGE]
+      },
+      binaryMediaTypes: ["*/*"]
+    });
+
+    const {{ camelCase service-name }}Bucket = new aws_s3.Bucket(this, '{{ camelCase service-name }}Bucket');
+
+    const {{ camelCase service-name }}Lambda = new NodejsFunction(this, "{{ camelCase service-name }}Lambda", {
+      runtime: Runtime.NODEJS_18_X,
+      entry: path.join(__dirname, `/../src/{{ dashCase service-name }}.ts`),
+      handler: "handler",
+    });
+
+    //Create notification for when an object is created in the Bucket
+    const notification = new aws_s3_notifications.LambdaDestination({{ camelCase service-name }}Lambda)
+    {{ camelCase service-name }}Bucket.addEventNotification(aws_s3.EventType.OBJECT_CREATED, notification)
+    
+    //Create {folder} API resource to list objects in a given bucket
+    const bucketResource = restApi.root.addResource("{item}");
+
+    // Create IAM Role for API Gateway
+    this.apiGatewayRole = new iam.Role(this, 'api-gateway-role', {
+      assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com')
+    });
+
+    //PutObject method
+    this.addActionToPolicy("s3:PutObject");
+    const putObjectIntegration = new apigw.AwsIntegration({
+      service: "s3",
+      region: "us-east-1",
+      path: `${{curlyfront}}{{ camelCase service-name }}Bucket.bucketName}/{object}.pdf`,
+      integrationHttpMethod: "PUT",
+      options: {
+        credentialsRole: this.apiGatewayRole,
+        passthroughBehavior: apigw.PassthroughBehavior.WHEN_NO_TEMPLATES,
+        requestParameters: { 
+          'integration.request.path.bucket': 'method.request.path.folder',
+          'integration.request.path.object': 'method.request.path.item',
+          'integration.request.header.Accept': 'method.request.header.Accept' 
+        },
+        integrationResponses: [{
+          statusCode: '200',
+          responseParameters: { 'method.response.header.Content-Type': 'integration.response.header.Content-Type'}
+        }]        
+      }
+    });
+
+    //PutObject method options
+    const putObjectMethodOptions = {
+      authorizationType: apigw.AuthorizationType.IAM,
+      requestParameters: {
+        'method.request.path.folder': true,
+        'method.request.path.item': true,
+        'method.request.header.Accept': true,
+        'method.request.header.Content-Type': true
+      },
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Content-Type': true
+          }
+        }]
+    };
+    bucketResource.addMethod("PUT", putObjectIntegration, putObjectMethodOptions);
+  }
+    private addActionToPolicy(action: string) {
+    this.apiGatewayRole.addToPolicy(new iam.PolicyStatement({
+        resources: [
+            "*"
+        ],
+        actions: [`${action}`]
+    }));
+  }
+}

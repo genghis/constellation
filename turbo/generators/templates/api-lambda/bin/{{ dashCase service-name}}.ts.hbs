@@ -1,0 +1,13 @@
+import 'source-map-support/register';
+import * as cdk from 'aws-cdk-lib';
+import { {{ pascalCase service-name}}Stack } from '../stacks/{{ dashCase service-name }}Stack';
+
+const app = new cdk.App();
+
+new {{ pascalCase service-name}}Stack(app, 'orion-prod-{{ pascalCase service-name }}', {
+
+})
+
+new {{ pascalCase service-name}}Stack(app, 'orion-dev-{{ pascalCase service-name }}', {
+
+})
